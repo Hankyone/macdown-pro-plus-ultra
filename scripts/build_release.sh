@@ -26,6 +26,7 @@ cd "$ROOT"
 
 git submodule update --init --recursive
 make -C Dependency/peg-markdown-highlight
+trash "$ROOT/Dependency/version/version.h" 2>/dev/null || true
 pod install
 
 xcodebuild \

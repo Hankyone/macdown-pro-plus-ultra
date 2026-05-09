@@ -29,7 +29,7 @@
     NSFileHandle *stdoutReadHandle = stdoutPipe.fileHandleForReading;
 
     _task = [[NSTask alloc] init];
-    _task.launchPath = @"brew";
+    _task.launchPath = MPHomebrewExecutablePath();
     if (args)
         _task.arguments = args;
     _task.standardOutput = stdoutPipe;
@@ -91,3 +91,19 @@ void MPDetectHomebrewPrefixWithCompletionhandler(void(^handler)(NSString *))
     [c runWithCompletionHandler:handler];
 }
 
+NSString *MPHomebrewExecutablePath(void)
+{
+    NSArray<NSString *> *candidates = @[
+        @"/opt/homebrew/bin/brew",
+        @"/usr/local/bin/brew",
+        @"brew",
+    ];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    for (NSString *path in candidates)
+    {
+        if ([path containsString:@"/"] && ![fm isExecutableFileAtPath:path])
+            continue;
+        return path;
+    }
+    return @"brew";
+}

@@ -1,0 +1,29 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CocoaPods dependencies
+        run: pod install
+
+      - name: Build markdown highlighter
+        run: make -C Dependency/peg-markdown-highlight
+
+      - name: Build app
+        run: |
+          xcodebuild \
+            -workspace MacDown.xcworkspace \
+            -scheme MacDown \
+            -configuration Release \
+            -derivedDataPath build/DerivedData \
+            MACOSX_DEPLOYMENT_TARGET=10.13 \
+            CODE_SIGNING_ALLOWED=NO

@@ -8,10 +8,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>Macdown custom control</string>
+			<string>MacDown Pro Plus Ultra custom control</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>x-macdown</string>
+				<string>x-macdown-pppu</string>
 			</array>
 		</dict>
 	</array>
@@ -86,6 +86,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>${PRODUCT_NAME}</string>
+	<key>CFBundleDisplayName</key>
+	<string>MacDown Pro Plus Ultra</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -131,9 +133,9 @@
 	<key>OSAScriptingDefinition</key>
 	<string>MacDown.sdef</string>
 	<key>SUBetaFeedURL</key>
-	<string>https://macdown.uranusjr.com/sparkle/macdown/testing/appcast.xml</string>
+	<string>https://github.com/Hankyone/macdown-pro-plus-ultra/releases/latest/download/appcast.xml</string>
 	<key>SUFeedURL</key>
-	<string>https://macdown.uranusjr.com/sparkle/macdown/stable/appcast.xml</string>
+	<string>https://github.com/Hankyone/macdown-pro-plus-ultra/releases/latest/download/appcast.xml</string>
 	<key>SUPublicDSAKeyFile</key>
 	<string>dsa_pub.pem</string>
 	<key>UTExportedTypeDeclarations</key>

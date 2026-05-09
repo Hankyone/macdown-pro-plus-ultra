@@ -9,18 +9,18 @@
 #import "version.h"
 
 // These should match the main bundle's values.
-static NSString * const kMPApplicationName = @"MacDown";
+static NSString * const kMPApplicationName = @"MacDown Pro Plus Ultra";
 
 #ifdef DEBUG
-static NSString * const kMPApplicationBundleIdentifier = @"com.uranusjr.macdown-debug";
+static NSString * const kMPApplicationBundleIdentifier = @"com.hankyone.macdown-pro-plus-ultra-debug";
 #else
-static NSString * const kMPApplicationBundleIdentifier = @"com.uranusjr.macdown";
+static NSString * const kMPApplicationBundleIdentifier = @"com.hankyone.macdown-pro-plus-ultra";
 #endif
 
-static NSString * const kMPApplicationSuiteName = @"com.uranusjr.macdown";
+static NSString * const kMPApplicationSuiteName = @"com.hankyone.macdown-pro-plus-ultra";
 
-static NSString * const MPCommandInstallationPath = @"/usr/local/bin/macdown";
-static NSString * const kMPCommandName = @"macdown";
+static NSString * const MPCommandInstallationPath = @"/usr/local/bin/macdown-pppu";
+static NSString * const kMPCommandName = @"macdown-pppu";
 
 static NSString * const kMPHelpKey = @"help";
 static NSString * const kMPVersionKey = @"version";

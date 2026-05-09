@@ -40,6 +40,7 @@ NS_INLINE NSColor *MPGetInstallationIndicatorColor(BOOL installed)
 @property (weak) IBOutlet NSButton *installUninstallButton;
 
 @property (nonatomic) NSURL *shellUtilityURL;
+@property (copy, nonatomic) NSString *preferredCommandInstallationPath;
 
 @end
 
@@ -121,42 +122,55 @@ NS_INLINE NSColor *MPGetInstallationIndicatorColor(BOOL installed)
 #pragma mark - Private methods
 
 /**
- * Searches for the the macdown shell utility and invokes foundShellUtilityAtURL: if found.
+ * Searches for the shell utility and invokes foundShellUtilityAtURL: if found.
  */
 - (void)lookForShellUtility
 {
     __weak MPTerminalPreferencesViewController *weakSelf = self;
     MPDetectHomebrewPrefixWithCompletionhandler(^(NSString *output) {
-        NSString *macdownPath = MPCommandInstallationPath;
-        if (output)
-        {
-            NSCharacterSet *padding =
-                [NSCharacterSet whitespaceAndNewlineCharacterSet];
-            NSString *prefix = [output stringByTrimmingCharactersInSet:padding];
-            macdownPath =
-                [prefix stringByAppendingPathComponent:@"bin/macdown"];
-        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *macdownPath = MPCommandInstallationPath;
+            if (output)
+            {
+                NSCharacterSet *padding =
+                    [NSCharacterSet whitespaceAndNewlineCharacterSet];
+                NSString *prefix =
+                    [output stringByTrimmingCharactersInSet:padding];
+                if (prefix.length)
+                    macdownPath =
+                        [prefix stringByAppendingPathComponent:
+                            [NSString stringWithFormat:@"bin/%@", kMPCommandName]];
+            }
+            weakSelf.preferredCommandInstallationPath = macdownPath;
 
-        if ([[NSFileManager defaultManager] fileExistsAtPath:macdownPath])
-            weakSelf.shellUtilityURL = [NSURL fileURLWithPath:macdownPath];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:macdownPath])
+                weakSelf.shellUtilityURL = [NSURL fileURLWithPath:macdownPath];
+            else
+                weakSelf.shellUtilityURL = nil;
+        });
     });
 }
 
 - (void)installShellUtility
 {
-    // URL for macdown utility in .app bundle
+    // URL for shell utility in .app bundle.
     NSURL *sharedSupportURL = [NSBundle mainBundle].sharedSupportURL;
     NSString *utilityBundlePath =
-        [sharedSupportURL URLByAppendingPathComponent:@"bin/macdown"].path;
+        [sharedSupportURL URLByAppendingPathComponent:
+            [NSString stringWithFormat:@"bin/%@", kMPCommandName]].path;
 
     NSFileManager *fm = [NSFileManager defaultManager];
     if ([fm fileExistsAtPath:utilityBundlePath])
     {
-        BOOL ok = [fm createSymbolicLinkAtPath:MPCommandInstallationPath
-                           withDestinationPath:utilityBundlePath error:NULL];
+        NSString *installPath =
+            self.preferredCommandInstallationPath ?: MPCommandInstallationPath;
+        NSError *error = nil;
+        BOOL ok = [fm createSymbolicLinkAtPath:installPath
+                           withDestinationPath:utilityBundlePath error:&error];
         if (ok)
             [self lookForShellUtility];
-        // TODO: Handle install failure.
+        else
+            [self presentShellUtilityError:error installing:YES];
     }
 }
 
@@ -168,11 +182,24 @@ NS_INLINE NSColor *MPGetInstallationIndicatorColor(BOOL installed)
     BOOL ok = [[NSFileManager defaultManager] removeItemAtURL:url error:NULL];
     if (ok)
         self.shellUtilityURL = nil;
-    // TODO: Handle removal failure.
+    else
+        [self presentShellUtilityError:nil installing:NO];
+}
+
+- (void)presentShellUtilityError:(NSError *)error installing:(BOOL)installing
+{
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = installing ?
+        NSLocalizedString(@"Could not install shell utility", nil) :
+        NSLocalizedString(@"Could not uninstall shell utility", nil);
+    alert.informativeText = error.localizedDescription ?:
+        NSLocalizedString(@"macOS did not provide a detailed error.", nil);
+    [alert addButtonWithTitle:NSLocalizedString(@"OK", nil)];
+    [alert beginSheetModalForWindow:self.view.window completionHandler:nil];
 }
 
 /**
- * Highlights all occurences of "macdown" in the info-text
+ * Highlights all occurrences of the shell command name in the info-text.
  */
 - (void)highlightMacdownInInfo
 {
@@ -188,7 +215,7 @@ NS_INLINE NSColor *MPGetInstallationIndicatorColor(BOOL installed)
     {
         searchRange.length = infoString.length - searchRange.location;
         NSRange foundRange =
-            [infoString rangeOfString:@"macdown"
+            [infoString rangeOfString:kMPCommandName
                               options:NSLiteralSearch range:searchRange];
         
         if (foundRange.location != NSNotFound)

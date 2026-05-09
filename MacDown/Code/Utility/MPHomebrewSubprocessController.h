@@ -18,3 +18,4 @@
 
 
 void MPDetectHomebrewPrefixWithCompletionhandler(void(^handler)(NSString *));
+NSString *MPHomebrewExecutablePath(void);

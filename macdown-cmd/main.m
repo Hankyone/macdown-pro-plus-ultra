@@ -86,7 +86,7 @@ int main(int argc, const char * argv[])
         NSData *dataFromPipe = MPPipedData();
         
         if (dataFromPipe) {
-            // Store piped content in a temporary file which will be read by MacDown on launch
+            // Store piped content in a temporary file which will be read by the app on launch.
             NSString *fileName = [NSString stringWithFormat:@"%@_%@", [[NSProcessInfo processInfo] globallyUniqueString], @"pipedText.txt"];
             NSURL *fileURL = [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:fileName]];
             
@@ -113,9 +113,8 @@ int main(int argc, const char * argv[])
         }
         MPCollectForMacDown(urls);
 
-        // Launch MacDown.
+        // Launch MacDown Pro Plus Ultra.
         [[NSWorkspace sharedWorkspace] launchAppWithBundleIdentifier:kMPApplicationBundleIdentifier options:NSWorkspaceLaunchDefault additionalEventParamDescriptor:nil launchIdentifier:nil];
     }
     return EXIT_SUCCESS;
 }
-

@@ -35,6 +35,7 @@ xcodebuild \
   -configuration Release \
   -derivedDataPath "$DERIVED_DATA" \
   MACOSX_DEPLOYMENT_TARGET=10.13 \
+  ARCHS=x86_64 \
   CODE_SIGNING_ALLOWED=NO
 
 APP_SRC="$PRODUCTS/$APP_NAME"

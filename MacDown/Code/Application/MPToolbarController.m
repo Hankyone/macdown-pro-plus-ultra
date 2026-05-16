@@ -99,7 +99,7 @@ static CGFloat itemWidth = 37;
 - (NSArray *)toolbarItemIdentifiersFromItemsArray:(NSArray *)toolbarItemsArray {
     NSMutableArray *orderedIdentifiers = [NSMutableArray new];
     
-    for (NSToolbarItem *item in self->toolbarItems) {
+    for (NSToolbarItem *item in toolbarItemsArray) {
         [orderedIdentifiers addObject:item.itemIdentifier];
     }
     
@@ -125,44 +125,36 @@ static CGFloat itemWidth = 37;
 #pragma mark - NSToolbarDelegate
 - (NSArray<NSString *> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
-    // From toolbar item dictionary(setupToolbarItems)
-    //NSArray *orderedToolbarItemIdentifiers = [self orderedToolbarDefaultItemKeysForDictionary:self->toolbarItems];
     NSArray *orderedToolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
     
-    // Mixed identifiers from dictionary and space at below specified indices
     NSMutableArray *defaultItemIdentifiers = [NSMutableArray new];
-    
-    // Add space after the specified toolbar item indices
-    int spaceAfterIndices[] = {}; // No space in the default set
-    int flexibleSpaceAfterIndices[] = {2, 3, 5, 7, 11};
-    int i = 0;
-    int j = 0;
-    int k = 0;
+    NSSet<NSNumber *> *spaceAfterIndices = [NSSet set]; // No space in the default set.
+    NSSet<NSNumber *> *flexibleSpaceAfterIndices =
+        [NSSet setWithObjects:@2, @3, @5, @7, @11, nil];
+    NSInteger index = 0;
     
     for (NSString *itemIdentifier in orderedToolbarItemIdentifiers)
     {
         // exclude some toolbar items from the default toolbar
-        if ([itemIdentifier  isEqual: @"comment"]
-            || [itemIdentifier  isEqual: @"highlight"]
-            || [itemIdentifier  isEqual: @"strikethrough"]) {
+        if ([itemIdentifier isEqualToString:@"comment"]
+            || [itemIdentifier isEqualToString:@"highlight"]
+            || [itemIdentifier isEqualToString:@"strikethrough"]) {
             // do nothing here
         }else {
             [defaultItemIdentifiers addObject:itemIdentifier];
         }
         
-        if (i == spaceAfterIndices[j])
+        if ([spaceAfterIndices containsObject:@(index)])
         {
             [defaultItemIdentifiers addObject:NSToolbarSpaceItemIdentifier];
-            j++;
         }
         
-        if (i == flexibleSpaceAfterIndices[k])
+        if ([flexibleSpaceAfterIndices containsObject:@(index)])
         {
             [defaultItemIdentifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
-            k++;
         }
         
-        i++;
+        index++;
     }
     
     return [defaultItemIdentifiers copy];

@@ -4,7 +4,16 @@
   <img src="MacDown/Images.xcassets/AppIcon.appiconset/icon_128x128.png" alt="MacDown Pro Plus Ultra icon" width="128" height="128">
 </p>
 
-MacDown Pro Plus Ultra is a personal fork of MacDown with a crowned icon and a separate name. Nothing meaningful has changed yet; this space is reserved for future nonsense and/or improvements.
+MacDown Pro Plus Ultra is a personal fork of MacDown with a crowned icon, a separate name, and a small set of quality-of-life changes.
+
+## Fork Changes
+
+- Quits when the last app window closes, including the normal document-window path and the menu-only/update-check path.
+- Adds a Finder background context menu item through a bundled Finder Sync extension. Right-click a Finder folder background and choose **New File** to create a zero-byte `untitled` file in that folder. Existing files are handled as `untitled 2`, `untitled 3`, and so on.
+
+## Updates
+
+The app uses this fork's Sparkle update feed. The intended workflow is: implement a feature, build and sign a release, publish the zip and appcast to this repo's GitHub release, then update the installed app through **MacDown Pro Plus Ultra > Check for Updates...**.
 
 ---
 

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>MacDown Pro Plus Ultra Updates</title>
+    <item>
+      <title>Version 0.8.0d10</title>
+      <pubDate>Sat, 16 May 2026 20:53:54 +0000</pubDate>
+      <enclosure
+        url="https://github.com/Hankyone/macdown-pro-plus-ultra/releases/download/v0.8.0d10/MacDownProPlusUltra.app.zip"
+        sparkle:version="1124"
+        sparkle:shortVersionString="0.8.0d10"
+        sparkle:dsaSignature="MEQCIHfNOlPnPzePLxb7IPRMvPsVpYMIwAvhkUpaZeTbJLAiAiAhSlX84RynS2CpdaLsxA6G7iq7/6UlGHJbotNtlcCCEA=="
+        length="9747150"
+        type="application/octet-stream" />
+    </item>
+  </channel>
+</rss>

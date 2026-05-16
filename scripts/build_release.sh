@@ -39,6 +39,7 @@ xcodebuild \
 
 APP_SRC="$PRODUCTS/$APP_NAME"
 APP_TMP="$TMPDIR/$APP_NAME"
+FINDER_EXTENSION="$APP_TMP/Contents/PlugIns/MacDownFinderExtension.appex"
 
 if [[ ! -d "$APP_SRC" ]]; then
   echo "Build did not produce $APP_SRC" >&2
@@ -48,7 +49,22 @@ fi
 COPYFILE_DISABLE=1 /usr/bin/tar -cf - -C "$PRODUCTS" "$APP_NAME" \
   | COPYFILE_DISABLE=1 /usr/bin/tar -xf - -C "$TMPDIR"
 
+mkdir -p "$FINDER_EXTENSION/Contents/MacOS"
+cp "$ROOT/MacDownFinderExtension/Info.plist" "$FINDER_EXTENSION/Contents/Info.plist"
+swiftc \
+  -emit-executable \
+  -parse-as-library \
+  -module-name MacDownFinderExtension \
+  -framework Cocoa \
+  -framework FinderSync \
+  -Xlinker -e -Xlinker _NSExtensionMain \
+  "$ROOT/MacDownFinderExtension/FinderSync.swift" \
+  -o "$FINDER_EXTENSION/Contents/MacOS/MacDownFinderExtension"
+
 xattr -cr "$APP_TMP"
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \
+  --entitlements "$ROOT/MacDownFinderExtension/MacDownFinderExtension.entitlements" \
+  "$FINDER_EXTENSION"
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \
   "$APP_TMP/Contents/SharedSupport/bin/macdown-pppu"
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \

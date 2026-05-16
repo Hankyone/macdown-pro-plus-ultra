@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${GITHUB_REPOSITORY:-Hankyone/macdown-pro-plus-ultra}"
 ZIP_PATH="$ROOT/dist/MacDownProPlusUltra.app.zip"
 APPCAST_PATH="$ROOT/dist/appcast.xml"
+REPO_APPCAST_PATH="$ROOT/appcast.xml"
 VERIFY_DIR="$(mktemp -d)"
 APP_PATH="$VERIFY_DIR/MacDown Pro Plus Ultra.app"
 
@@ -48,5 +49,7 @@ else
     --notes "Release $VERSION ($BUILD)."
 fi
 
+cp "$APPCAST_PATH" "$REPO_APPCAST_PATH"
+
 echo "Published $TAG to $REPO"
-echo "Feed: https://github.com/$REPO/releases/latest/download/appcast.xml"
+echo "Feed: https://raw.githubusercontent.com/$REPO/master/appcast.xml"

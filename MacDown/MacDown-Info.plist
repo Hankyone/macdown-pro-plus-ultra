@@ -133,9 +133,9 @@
 	<key>OSAScriptingDefinition</key>
 	<string>MacDown.sdef</string>
 	<key>SUBetaFeedURL</key>
-	<string>https://github.com/Hankyone/macdown-pro-plus-ultra/releases/latest/download/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/Hankyone/macdown-pro-plus-ultra/master/appcast.xml</string>
 	<key>SUFeedURL</key>
-	<string>https://github.com/Hankyone/macdown-pro-plus-ultra/releases/latest/download/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/Hankyone/macdown-pro-plus-ultra/master/appcast.xml</string>
 	<key>SUPublicDSAKeyFile</key>
 	<string>dsa_pub.pem</string>
 	<key>UTExportedTypeDeclarations</key>

@@ -6,6 +6,7 @@ APP_NAME="MacDown Pro Plus Ultra.app"
 ZIP_NAME="MacDownProPlusUltra.app.zip"
 REPO="${GITHUB_REPOSITORY:-Hankyone/macdown-pro-plus-ultra}"
 SPARKLE_PRIVATE_KEY="${SPARKLE_PRIVATE_KEY:-$ROOT/.secrets/sparkle_dsa_priv.pem}"
+SPARKLE_DSA_SIGN_UPDATE="${SPARKLE_DSA_SIGN_UPDATE:-$ROOT/Pods/Sparkle/bin/old_dsa_scripts/sign_update}"
 DERIVED_DATA="$ROOT/build/DerivedData"
 PRODUCTS="$DERIVED_DATA/Build/Products/Release"
 DIST="$ROOT/dist"
@@ -22,6 +23,12 @@ if [[ ! -f "$SPARKLE_PRIVATE_KEY" ]]; then
   exit 1
 fi
 
+if [[ ! -x "$SPARKLE_DSA_SIGN_UPDATE" ]]; then
+  echo "Missing Sparkle DSA signing tool: $SPARKLE_DSA_SIGN_UPDATE" >&2
+  echo "Set SPARKLE_DSA_SIGN_UPDATE=/path/to/old_dsa_scripts/sign_update." >&2
+  exit 1
+fi
+
 cd "$ROOT"
 
 git submodule update --init --recursive
@@ -35,7 +42,7 @@ xcodebuild \
   -configuration Release \
   -derivedDataPath "$DERIVED_DATA" \
   MACOSX_DEPLOYMENT_TARGET=10.13 \
-  ARCHS=x86_64 \
+  ARCHS=arm64 \
   CODE_SIGNING_ALLOWED=NO
 
 APP_SRC="$PRODUCTS/$APP_NAME"
@@ -84,7 +91,7 @@ COPYFILE_DISABLE=1 ditto -c -k --keepParent --norsrc --noextattr "$APP_TMP" "$ZI
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_TMP/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_TMP/Contents/Info.plist")"
 SIZE="$(stat -f%z "$ZIP_PATH")"
-SIGNATURE="$(Pods/Sparkle/bin/sign_update "$ZIP_PATH" "$SPARKLE_PRIVATE_KEY" | tr -d '\n')"
+SIGNATURE="$("$SPARKLE_DSA_SIGN_UPDATE" "$ZIP_PATH" "$SPARKLE_PRIVATE_KEY" | tr -d '\n')"
 PUBDATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/v$VERSION/$ZIP_NAME"
 

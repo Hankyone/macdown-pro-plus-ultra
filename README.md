@@ -13,7 +13,7 @@ MacDown Pro Plus Ultra is a personal fork of MacDown with a crowned icon, a sepa
 
 ## Updates
 
-The app uses this fork's Sparkle update feed. The intended workflow is: implement a feature, build and sign a release, publish the zip and appcast to this repo's GitHub release, then update the installed app through **MacDown Pro Plus Ultra > Check for Updates...**.
+The app uses this fork's Sparkle update feed instead of upstream MacDown's feed.
 
 ---
 

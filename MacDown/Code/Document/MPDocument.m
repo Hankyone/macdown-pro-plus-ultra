@@ -497,6 +497,11 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     }
 
     [super close];
+
+    [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+        if (NSApp.windows.count == 0)
+            [NSApp terminate:nil];
+    }];
 }
 
 + (BOOL)autosavesInPlace

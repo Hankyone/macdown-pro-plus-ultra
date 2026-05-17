@@ -4,7 +4,7 @@
   <img src="MacDown/Images.xcassets/AppIcon.appiconset/icon_128x128.png" alt="MacDown Pro Plus Ultra icon" width="128" height="128">
 </p>
 
-MacDown Pro Plus Ultra is a personal fork of MacDown with a crowned icon, a separate name, and a small set of quality-of-life changes.
+MacDown Pro Plus Ultra is a personal fork of MacDown with a small set of quality-of-life changes.
 
 ## Fork Changes
 

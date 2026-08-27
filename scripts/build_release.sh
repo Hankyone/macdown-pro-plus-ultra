@@ -13,6 +13,8 @@ DIST="$ROOT/dist"
 TMPDIR="$(mktemp -d)"
 XCODE_DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-macdown-notary}"
+RELEASE_VERSION="${RELEASE_VERSION:-}"
+RELEASE_BUILD="${RELEASE_BUILD:-}"
 
 cleanup() {
   trash "$TMPDIR" 2>/dev/null || true
@@ -32,6 +34,39 @@ if [[ ! -x "$SPARKLE_DSA_SIGN_UPDATE" ]]; then
 fi
 
 cd "$ROOT"
+
+if [[ -z "$RELEASE_VERSION" || -z "$RELEASE_BUILD" ]]; then
+  release_values=()
+  while IFS= read -r value; do
+    release_values+=("$value")
+  done < <(python3 - "$ROOT/appcast.xml" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+enclosure = root.find("./channel/item/enclosure")
+if enclosure is None:
+    raise SystemExit("Existing appcast has no release enclosure")
+
+version = enclosure.attrib["{http://www.andymatuschak.org/xml-namespaces/sparkle}shortVersionString"]
+build = enclosure.attrib["{http://www.andymatuschak.org/xml-namespaces/sparkle}version"]
+match = re.fullmatch(r"(.+d)(\d+)", version)
+if match is None or not build.isdigit():
+    raise SystemExit("Set RELEASE_VERSION and RELEASE_BUILD explicitly")
+
+print(f"{match.group(1)}{int(match.group(2)) + 1}")
+print(int(build) + 1)
+PY
+  )
+  RELEASE_VERSION="${RELEASE_VERSION:-${release_values[0]:-}}"
+  RELEASE_BUILD="${RELEASE_BUILD:-${release_values[1]:-}}"
+fi
+
+if [[ -z "$RELEASE_VERSION" || -z "$RELEASE_BUILD" ]]; then
+  echo "Could not determine the next release version and build." >&2
+  exit 1
+fi
 
 git submodule update --init --recursive
 make -C Dependency/peg-markdown-highlight
@@ -63,6 +98,10 @@ COPYFILE_DISABLE=1 /usr/bin/tar -cf - -C "$PRODUCTS" "$APP_NAME" \
 
 mkdir -p "$FINDER_EXTENSION/Contents/MacOS"
 cp "$ROOT/MacDownFinderExtension/Info.plist" "$FINDER_EXTENSION/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$APP_TMP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$APP_TMP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$FINDER_EXTENSION/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$FINDER_EXTENSION/Contents/Info.plist"
 DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun swiftc \
   -emit-executable \
   -parse-as-library \
@@ -120,8 +159,8 @@ trash "$ZIP_PATH" "$APPCAST_PATH" 2>/dev/null || true
 
 COPYFILE_DISABLE=1 ditto -c -k --keepParent --norsrc --noextattr "$APP_TMP" "$ZIP_PATH"
 
-VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_TMP/Contents/Info.plist")"
-BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_TMP/Contents/Info.plist")"
+VERSION="$RELEASE_VERSION"
+BUILD="$RELEASE_BUILD"
 SIZE="$(stat -f%z "$ZIP_PATH")"
 SIGNATURE="$("$SPARKLE_DSA_SIGN_UPDATE" "$ZIP_PATH" "$SPARKLE_PRIVATE_KEY" | tr -d '\n')"
 PUBDATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"

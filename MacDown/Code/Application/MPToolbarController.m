@@ -7,6 +7,7 @@
 //
 
 #import "MPToolbarController.h"
+#import <QuartzCore/CAMediaTimingFunction.h>
 
 // Because we're creating selectors for methods which aren't in this class
 #pragma GCC diagnostic ignored "-Wundeclared-selector"
@@ -14,6 +15,154 @@
 
 
 static CGFloat itemWidth = 37;
+
+
+@interface MPViewModeControl : NSControl
+
+@property (nonatomic) NSInteger selectedSegment;
+
+- (instancetype)initWithLabels:(NSArray<NSString *> *)labels;
+- (void)setSelectedSegment:(NSInteger)selectedSegment animated:(BOOL)animated;
+
+@end
+
+
+@implementation MPViewModeControl
+{
+    NSGlassEffectView *_glassView;
+    NSGlassEffectView *_selectionView;
+    NSView *_contentView;
+    NSArray<NSButton *> *_buttons;
+    BOOL _hasLaidOutSelection;
+}
+
+- (instancetype)initWithLabels:(NSArray<NSString *> *)labels
+{
+    self = [super initWithFrame:NSMakeRect(0, 0, 220, 32)];
+    if (!self)
+        return nil;
+
+    _selectedSegment = NSNotFound;
+    self.wantsLayer = YES;
+
+    _contentView = [[NSView alloc] initWithFrame:self.bounds];
+    _contentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+
+    _selectionView = [[NSGlassEffectView alloc] initWithFrame:NSZeroRect];
+    _selectionView.style = NSGlassEffectViewStyleClear;
+    _selectionView.cornerRadius = 13;
+    _selectionView.tintColor = [NSColor unemphasizedSelectedContentBackgroundColor];
+    _selectionView.alphaValue = 0;
+    [_contentView addSubview:_selectionView];
+
+    NSMutableArray<NSButton *> *buttons = [NSMutableArray arrayWithCapacity:labels.count];
+    [labels enumerateObjectsUsingBlock:^(NSString *label, NSUInteger index, BOOL *stop) {
+        NSButton *button = [NSButton buttonWithTitle:label target:self action:@selector(selectViewMode:)];
+        button.tag = index;
+        button.bordered = NO;
+        button.buttonType = NSButtonTypeMomentaryPushIn;
+        button.font = [NSFont systemFontOfSize:[NSFont systemFontSize] weight:NSFontWeightMedium];
+        button.focusRingType = NSFocusRingTypeExterior;
+        button.accessibilityLabel = label;
+        button.accessibilityRole = NSAccessibilityRadioButtonRole;
+        [_contentView addSubview:button];
+        [buttons addObject:button];
+    }];
+    _buttons = [buttons copy];
+
+    _glassView = [[NSGlassEffectView alloc] initWithFrame:self.bounds];
+    _glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _glassView.cornerRadius = 16;
+    _glassView.contentView = _contentView;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+    if (@available(macOS 27.0, *))
+        _glassView.effectIsInteractive = YES;
+#endif
+    [self addSubview:_glassView];
+
+    return self;
+}
+
+- (NSSize)intrinsicContentSize
+{
+    return NSMakeSize(220, 32);
+}
+
+- (BOOL)allowsVibrancy
+{
+    return YES;
+}
+
+- (void)layout
+{
+    [super layout];
+
+    CGFloat segmentWidth = NSWidth(self.bounds) / _buttons.count;
+    [_buttons enumerateObjectsUsingBlock:^(NSButton *button, NSUInteger index, BOOL *stop) {
+        button.frame = NSMakeRect(index * segmentWidth, 0, segmentWidth, NSHeight(self.bounds));
+    }];
+
+    if (_selectedSegment != NSNotFound && !_hasLaidOutSelection)
+    {
+        _selectionView.frame = [self selectionFrameForSegment:_selectedSegment];
+        _selectionView.alphaValue = 1;
+        _hasLaidOutSelection = YES;
+    }
+}
+
+- (NSRect)selectionFrameForSegment:(NSInteger)segment
+{
+    CGFloat inset = 3;
+    CGFloat segmentWidth = NSWidth(self.bounds) / _buttons.count;
+    return NSMakeRect(segment * segmentWidth + inset,
+                      inset,
+                      segmentWidth - inset * 2,
+                      NSHeight(self.bounds) - inset * 2);
+}
+
+- (void)setSelectedSegment:(NSInteger)selectedSegment
+{
+    [self setSelectedSegment:selectedSegment animated:NO];
+}
+
+- (void)setSelectedSegment:(NSInteger)selectedSegment animated:(BOOL)animated
+{
+    if (selectedSegment < 0 || selectedSegment >= (NSInteger)_buttons.count)
+        return;
+
+    BOOL selectionChanged = _selectedSegment != selectedSegment;
+    _selectedSegment = selectedSegment;
+    [_buttons enumerateObjectsUsingBlock:^(NSButton *button, NSUInteger index, BOOL *stop) {
+        button.accessibilityValue = @(index == selectedSegment);
+    }];
+
+    [self layoutSubtreeIfNeeded];
+    NSRect targetFrame = [self selectionFrameForSegment:selectedSegment];
+    if (!animated
+        || !_hasLaidOutSelection
+        || !selectionChanged
+        || NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion)
+    {
+        _selectionView.frame = targetFrame;
+        _selectionView.alphaValue = 1;
+        _hasLaidOutSelection = YES;
+        return;
+    }
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.22;
+        context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        _selectionView.animator.frame = targetFrame;
+    } completionHandler:nil];
+}
+
+- (void)selectViewMode:(NSButton *)sender
+{
+    [self setSelectedSegment:sender.tag animated:YES];
+    [self sendAction:self.action to:self.target];
+}
+
+@end
 
 
 @implementation MPToolbarController
@@ -25,7 +174,7 @@ static CGFloat itemWidth = 37;
      * Map toolbar item identifier to it's NSToolbarItem or NSToolbarItemGroup object
      */
     NSMutableDictionary *toolbarItemIdentifierObjectDictionary;
-    NSSegmentedControl *viewModeControl;
+    MPViewModeControl *viewModeControl;
 }
 
 - (id)init
@@ -53,20 +202,9 @@ static CGFloat itemWidth = 37;
         NSLocalizedString(@"Preview", @"Preview-only view mode"),
         NSLocalizedString(@"Split", @"Editor and preview view mode")
     ];
-    self->viewModeControl = [NSSegmentedControl
-        segmentedControlWithLabels:viewModeLabels
-        trackingMode:NSSegmentSwitchTrackingSelectOne
-        target:self
-        action:@selector(selectedViewMode:)];
-    self->viewModeControl.segmentStyle = NSSegmentStyleAutomatic;
-    self->viewModeControl.segmentDistribution = NSSegmentDistributionFillEqually;
-    self->viewModeControl.controlSize = NSControlSizeRegular;
-    if (@available(macOS 26.0, *))
-        self->viewModeControl.borderShape = NSControlBorderShapeCapsule;
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
-    if (@available(macOS 27.0, *))
-        self->viewModeControl.role = NSSegmentedControlRoleValueSelection;
-#endif
+    self->viewModeControl = [[MPViewModeControl alloc] initWithLabels:viewModeLabels];
+    self->viewModeControl.target = self;
+    self->viewModeControl.action = @selector(selectedViewMode:);
 
     NSToolbarItem *viewModeItem = [[NSToolbarItem alloc]
         initWithItemIdentifier:@"view-mode"];
@@ -114,7 +252,7 @@ static CGFloat itemWidth = 37;
     self->toolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
 }
 
-- (void)selectedViewMode:(NSSegmentedControl *)sender
+- (void)selectedViewMode:(MPViewModeControl *)sender
 {
     if (sender.selectedSegment < MPDocumentViewModeEditor
         || sender.selectedSegment > MPDocumentViewModeSplit)
@@ -125,7 +263,7 @@ static CGFloat itemWidth = 37;
 
 - (void)syncViewMode
 {
-    self->viewModeControl.selectedSegment = self.document.documentViewMode;
+    [self->viewModeControl setSelectedSegment:self.document.documentViewMode animated:YES];
 }
 
 /**

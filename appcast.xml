@@ -3,14 +3,14 @@
   <channel>
     <title>MacDown Pro Plus Ultra Updates</title>
     <item>
-      <title>Version 0.8.0d14</title>
-      <pubDate>Thu, 27 Aug 2026 19:45:56 +0000</pubDate>
+      <title>Version 0.8.0d15</title>
+      <pubDate>Thu, 27 Aug 2026 20:16:21 +0000</pubDate>
       <enclosure
-        url="https://github.com/Hankyone/macdown-pro-plus-ultra/releases/download/v0.8.0d14/MacDownProPlusUltra.app.zip"
-        sparkle:version="1128"
-        sparkle:shortVersionString="0.8.0d14"
-        sparkle:dsaSignature="MEUCIQCSB0zJmuyp5hEJWcYEQLe7Ach8txtnb6kxEgRzwEiKhgIgDbP/DeKHledIWa4HUh9viuJAyaUMAfkWLoHqEO4+Z6w="
-        length="9766822"
+        url="https://github.com/Hankyone/macdown-pro-plus-ultra/releases/download/v0.8.0d15/MacDownProPlusUltra.app.zip"
+        sparkle:version="1129"
+        sparkle:shortVersionString="0.8.0d15"
+        sparkle:dsaSignature="MEYCIQCitjSLUfO9SZyo+I5uSccQAfpKAjfZplfulGGYjDLidQIhAI3BO+WA1cZo6a3Xm+JHdoPUQyYtG118LDdOb/5uLD1R"
+        length="9768378"
         type="application/octet-stream" />
     </item>
   </channel>

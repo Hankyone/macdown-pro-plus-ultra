@@ -71,14 +71,14 @@ DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun swiftc \
   -o "$FINDER_EXTENSION/Contents/MacOS/MacDownFinderExtension"
 
 xattr -cr "$APP_TMP"
-codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp \
   --entitlements "$ROOT/MacDownFinderExtension/MacDownFinderExtension.entitlements" \
   "$FINDER_EXTENSION"
-codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp \
   "$APP_TMP/Contents/SharedSupport/bin/macdown-pppu"
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \
   "$APP_TMP/Contents/Frameworks/Sparkle.framework"
-codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none --options=runtime \
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   "$APP_TMP"
 codesign --verify --strict --verbose=2 "$APP_TMP"
 

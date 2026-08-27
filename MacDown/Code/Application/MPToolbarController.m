@@ -25,7 +25,7 @@ static CGFloat itemWidth = 37;
      * Map toolbar item identifier to it's NSToolbarItem or NSToolbarItemGroup object
      */
     NSMutableDictionary *toolbarItemIdentifierObjectDictionary;
-    NSToolbarItemGroup *viewModeItemGroup;
+    NSSegmentedControl *viewModeControl;
 }
 
 - (id)init
@@ -48,24 +48,33 @@ static CGFloat itemWidth = 37;
 
 - (void)setupToolbarItems
 {
-    self->viewModeItemGroup = [NSToolbarItemGroup
-        groupWithItemIdentifier:@"view-mode"
-        titles:@[
-            NSLocalizedString(@"Editor", @"Editor-only view mode"),
-            NSLocalizedString(@"Preview", @"Preview-only view mode"),
-            NSLocalizedString(@"Split", @"Editor and preview view mode")
-        ]
-        selectionMode:NSToolbarItemGroupSelectionModeSelectOne
-        labels:@[
-            NSLocalizedString(@"Editor", @"Editor-only view mode"),
-            NSLocalizedString(@"Preview", @"Preview-only view mode"),
-            NSLocalizedString(@"Split", @"Editor and preview view mode")
-        ]
+    NSArray<NSString *> *viewModeLabels = @[
+        NSLocalizedString(@"Editor", @"Editor-only view mode"),
+        NSLocalizedString(@"Preview", @"Preview-only view mode"),
+        NSLocalizedString(@"Split", @"Editor and preview view mode")
+    ];
+    self->viewModeControl = [NSSegmentedControl
+        segmentedControlWithLabels:viewModeLabels
+        trackingMode:NSSegmentSwitchTrackingSelectOne
         target:self
         action:@selector(selectedViewMode:)];
-    self->viewModeItemGroup.label = NSLocalizedString(@"View", @"View mode toolbar group");
-    self->viewModeItemGroup.paletteLabel = self->viewModeItemGroup.label;
-    self->viewModeItemGroup.visibilityPriority = NSToolbarItemVisibilityPriorityUser;
+    self->viewModeControl.segmentStyle = NSSegmentStyleAutomatic;
+    self->viewModeControl.segmentDistribution = NSSegmentDistributionFillEqually;
+    self->viewModeControl.controlSize = NSControlSizeRegular;
+    if (@available(macOS 26.0, *))
+        self->viewModeControl.borderShape = NSControlBorderShapeCapsule;
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 270000
+    if (@available(macOS 27.0, *))
+        self->viewModeControl.role = NSSegmentedControlRoleValueSelection;
+#endif
+
+    NSToolbarItem *viewModeItem = [[NSToolbarItem alloc]
+        initWithItemIdentifier:@"view-mode"];
+    viewModeItem.label = NSLocalizedString(@"View", @"View mode toolbar group");
+    viewModeItem.paletteLabel = viewModeItem.label;
+    viewModeItem.toolTip = NSLocalizedString(@"Document View", @"View mode toolbar group tooltip");
+    viewModeItem.visibilityPriority = NSToolbarItemVisibilityPriorityUser;
+    viewModeItem.view = self->viewModeControl;
     
     // Set up all available toolbar items
     self->toolbarItems = @[
@@ -99,24 +108,24 @@ static CGFloat itemWidth = 37;
         [self toolbarItemWithIdentifier:@"comment" label:NSLocalizedString(@"Comment", @"Comment toolbar button") icon:@"ToolbarIconComment" action:@selector(toggleComment:)],
         [self toolbarItemWithIdentifier:@"highlight" label:NSLocalizedString(@"Highlight", @"Highlight toolbar button") icon:@"ToolbarIconHighlight" action:@selector(toggleHighlight:)],
         [self toolbarItemWithIdentifier:@"strikethrough" label:NSLocalizedString(@"Strikethrough", @"Strikethrough toolbar button") icon:@"ToolbarIconStrikethrough" action:@selector(toggleStrikethrough:)],
-        self->viewModeItemGroup
+        viewModeItem
     ];
     
     self->toolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
 }
 
-- (void)selectedViewMode:(NSToolbarItemGroup *)sender
+- (void)selectedViewMode:(NSSegmentedControl *)sender
 {
-    if (sender.selectedIndex < MPDocumentViewModeEditor
-        || sender.selectedIndex > MPDocumentViewModeSplit)
+    if (sender.selectedSegment < MPDocumentViewModeEditor
+        || sender.selectedSegment > MPDocumentViewModeSplit)
         return;
 
-    self.document.documentViewMode = (MPDocumentViewMode)sender.selectedIndex;
+    self.document.documentViewMode = (MPDocumentViewMode)sender.selectedSegment;
 }
 
 - (void)syncViewMode
 {
-    self->viewModeItemGroup.selectedIndex = self.document.documentViewMode;
+    self->viewModeControl.selectedSegment = self.document.documentViewMode;
 }
 
 /**
@@ -187,7 +196,7 @@ static CGFloat itemWidth = 37;
 
 - (NSArray<NSString *> *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
 {
-    return @[@"view-mode"];
+    return @[];
 }
 
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSString *)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag

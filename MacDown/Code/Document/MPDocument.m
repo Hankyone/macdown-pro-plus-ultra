@@ -1751,6 +1751,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     glass.cornerRadius = 16.0;
     glass.style = NSGlassEffectViewStyleRegular;
     glass.contentView = content;
+    if ([glass respondsToSelector:NSSelectorFromString(@"setEffectIsInteractive:")])
+        [glass setValue:@YES forKey:@"effectIsInteractive"];
     NSView *pill = glass;
 
     pill.translatesAutoresizingMaskIntoConstraints = NO;

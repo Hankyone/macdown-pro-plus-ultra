@@ -10,7 +10,7 @@ MacDown Pro Plus Ultra is a personal fork of MacDown with a small set of quality
 
 - Quits when the last app window closes, including the normal document-window path and the menu-only/update-check path.
 - Adds a Finder background context menu item through a bundled Finder Sync extension. Right-click a Finder folder background and choose **New File** to create a zero-byte `untitled` file in that folder. Existing files are handled as `untitled 2`, `untitled 3`, and so on.
-- Uses the modern macOS Liquid Glass toolbar, with centered formatting controls and one Editor, Preview, or Split view selector.
+- Uses the modern macOS Liquid Glass toolbar, with centered formatting controls and one Editor, Preview, or Split selector whose highlight slides between modes.
 - Refreshes an open document as soon as its file changes on disk. If the document has unsaved edits, a glass pill lets you reload the file or keep editing.
 
 ## Updates

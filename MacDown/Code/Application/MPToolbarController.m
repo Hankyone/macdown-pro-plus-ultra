@@ -7,7 +7,7 @@
 //
 
 #import "MPToolbarController.h"
-#import <QuartzCore/CAMediaTimingFunction.h>
+#import <QuartzCore/QuartzCore.h>
 
 // Because we're creating selectors for methods which aren't in this class
 #pragma GCC diagnostic ignored "-Wundeclared-selector"
@@ -30,8 +30,7 @@ static CGFloat itemWidth = 37;
 @implementation MPViewModeControl
 {
     NSGlassEffectView *_glassView;
-    NSGlassEffectView *_selectionView;
-    NSTextField *_selectionLabel;
+    NSView *_selectionView;
     NSView *_contentView;
     NSArray<NSButton *> *_buttons;
     BOOL _hasLaidOutSelection;
@@ -49,18 +48,12 @@ static CGFloat itemWidth = 37;
     _contentView = [[NSView alloc] initWithFrame:self.bounds];
     _contentView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 
-    _selectionView = [[NSGlassEffectView alloc] initWithFrame:NSZeroRect];
-    _selectionView.style = NSGlassEffectViewStyleClear;
-    _selectionView.cornerRadius = 13;
-    _selectionView.tintColor = [NSColor unemphasizedSelectedContentBackgroundColor];
+    _selectionView = [[NSView alloc] initWithFrame:NSZeroRect];
+    _selectionView.wantsLayer = YES;
+    _selectionView.layer.cornerRadius = 12;
+    _selectionView.layer.cornerCurve = kCACornerCurveContinuous;
     _selectionView.alphaValue = 0;
-    _selectionLabel = [NSTextField labelWithString:@""];
-    _selectionLabel.alignment = NSTextAlignmentCenter;
-    _selectionLabel.font = [NSFont systemFontOfSize:[NSFont systemFontSize] weight:NSFontWeightMedium];
-    _selectionLabel.textColor = NSColor.labelColor;
-    _selectionLabel.frame = _selectionView.bounds;
-    _selectionLabel.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-    _selectionView.contentView = _selectionLabel;
+    [self updateSelectionAppearance];
     [_contentView addSubview:_selectionView];
 
     NSMutableArray<NSButton *> *buttons = [NSMutableArray arrayWithCapacity:labels.count];
@@ -71,12 +64,17 @@ static CGFloat itemWidth = 37;
         button.buttonType = NSButtonTypeMomentaryPushIn;
         button.font = [NSFont systemFontOfSize:[NSFont systemFontSize] weight:NSFontWeightMedium];
         button.focusRingType = NSFocusRingTypeExterior;
+        button.accessibilityElement = YES;
         button.accessibilityLabel = label;
         button.accessibilityRole = NSAccessibilityRadioButtonRole;
         [_contentView addSubview:button];
         [buttons addObject:button];
     }];
     _buttons = [buttons copy];
+    self.accessibilityElement = YES;
+    self.accessibilityRole = NSAccessibilityRadioGroupRole;
+    self.accessibilityLabel = NSLocalizedString(@"Document View", @"View mode accessibility label");
+    self.accessibilityChildren = _buttons;
 
     _glassView = [[NSGlassEffectView alloc] initWithFrame:self.bounds];
     _glassView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
@@ -99,6 +97,18 @@ static CGFloat itemWidth = 37;
 - (BOOL)allowsVibrancy
 {
     return YES;
+}
+
+- (void)viewDidChangeEffectiveAppearance
+{
+    [super viewDidChangeEffectiveAppearance];
+    [self updateSelectionAppearance];
+}
+
+- (void)updateSelectionAppearance
+{
+    _selectionView.layer.backgroundColor =
+        [NSColor.labelColor colorWithAlphaComponent:0.14].CGColor;
 }
 
 - (void)layout
@@ -140,7 +150,6 @@ static CGFloat itemWidth = 37;
 
     BOOL selectionChanged = _selectedSegment != selectedSegment;
     _selectedSegment = selectedSegment;
-    _selectionLabel.stringValue = _buttons[selectedSegment].title;
     [_buttons enumerateObjectsUsingBlock:^(NSButton *button, NSUInteger index, BOOL *stop) {
         button.accessibilityValue = @(index == selectedSegment);
     }];
@@ -158,11 +167,20 @@ static CGFloat itemWidth = 37;
         return;
     }
 
-    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
-        context.duration = 0.22;
-        context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-        _selectionView.animator.frame = targetFrame;
-    } completionHandler:nil];
+    CALayer *presentationLayer = _selectionView.layer.presentationLayer;
+    CGFloat startingPosition = presentationLayer ? presentationLayer.position.x : _selectionView.layer.position.x;
+
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    _selectionView.frame = targetFrame;
+    [CATransaction commit];
+
+    CABasicAnimation *slide = [CABasicAnimation animationWithKeyPath:@"position.x"];
+    slide.fromValue = @(startingPosition);
+    slide.toValue = @(_selectionView.layer.position.x);
+    slide.duration = 0.26;
+    slide.timingFunction = [CAMediaTimingFunction functionWithControlPoints:0.22 :1.0 :0.36 :1.0];
+    [_selectionView.layer addAnimation:slide forKey:@"view-mode-selection-slide"];
 }
 
 - (void)selectViewMode:(NSButton *)sender

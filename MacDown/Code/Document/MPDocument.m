@@ -1777,12 +1777,6 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     self.externalChangePill.hidden = NO;
     self.externalChangePill.alphaValue = 1.0;
 
-    if (@available(macOS 27.0, *))
-    {
-        if ([self.externalChangePill isKindOfClass:NSGlassEffectView.class])
-            ((NSGlassEffectView *)self.externalChangePill).effectIsInteractive = requiresDecision;
-    }
-
     if (!requiresDecision)
     {
         NSUInteger generation = self.externalChangePillGeneration;

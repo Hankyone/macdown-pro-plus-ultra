@@ -12,6 +12,7 @@ PRODUCTS="$DERIVED_DATA/Build/Products/Release"
 DIST="$ROOT/dist"
 TMPDIR="$(mktemp -d)"
 XCODE_DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
+NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-macdown-notary}"
 
 cleanup() {
   trash "$TMPDIR" 2>/dev/null || true
@@ -71,16 +72,25 @@ DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun swiftc \
   -o "$FINDER_EXTENSION/Contents/MacOS/MacDownFinderExtension"
 
 xattr -cr "$APP_TMP"
-codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp \
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   --entitlements "$ROOT/MacDownFinderExtension/MacDownFinderExtension.entitlements" \
   "$FINDER_EXTENSION"
-codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp \
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   "$APP_TMP/Contents/SharedSupport/bin/macdown-pppu"
-codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp=none \
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   "$APP_TMP/Contents/Frameworks/Sparkle.framework"
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   "$APP_TMP"
 codesign --verify --strict --verbose=2 "$APP_TMP"
+
+NOTARIZATION_ZIP="$TMPDIR/notarization.zip"
+COPYFILE_DISABLE=1 ditto -c -k --keepParent --norsrc --noextattr "$APP_TMP" "$NOTARIZATION_ZIP"
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun notarytool submit "$NOTARIZATION_ZIP" \
+  --keychain-profile "$NOTARYTOOL_PROFILE" \
+  --wait
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun stapler staple "$APP_TMP"
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun stapler validate "$APP_TMP"
+spctl --assess --type execute --verbose=2 "$APP_TMP"
 
 mkdir -p "$DIST"
 ZIP_PATH="$DIST/$ZIP_NAME"

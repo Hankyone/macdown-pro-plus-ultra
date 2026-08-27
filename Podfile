@@ -1,4 +1,4 @@
-platform :osx, "10.8"
+platform :osx, "26.0"
 
 source 'https://github.com/MacDownApp/cocoapods-specs.git'  # Patched libraries.
 source 'https://cdn.cocoapods.org/'
@@ -16,7 +16,7 @@ target "MacDown" do
   pod 'MASPreferences', '~> 1.3'
   pod 'Sparkle', '~> 1.24', :inhibit_warnings => false
 
-  # Locked on 0.4.x until we drop 10.8.
+  # Keep Sparkle on the existing update-signing format used by this fork.
   pod 'PAPreferences', '~> 0.4'
 end
 

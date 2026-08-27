@@ -25,6 +25,7 @@ static CGFloat itemWidth = 37;
      * Map toolbar item identifier to it's NSToolbarItem or NSToolbarItemGroup object
      */
     NSMutableDictionary *toolbarItemIdentifierObjectDictionary;
+    NSToolbarItemGroup *viewModeItemGroup;
 }
 
 - (id)init
@@ -47,9 +48,24 @@ static CGFloat itemWidth = 37;
 
 - (void)setupToolbarItems
 {
-    // Set up layout drop down alternatives. title will be set in validateUserInterfaceItem:
-    NSMenuItem *toggleEditorMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(toggleEditorPane:) keyEquivalent:@"e"];
-    NSMenuItem *togglePreviewMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:@selector(togglePreviewPane:) keyEquivalent:@"p"];
+    self->viewModeItemGroup = [NSToolbarItemGroup
+        groupWithItemIdentifier:@"view-mode"
+        titles:@[
+            NSLocalizedString(@"Editor", @"Editor-only view mode"),
+            NSLocalizedString(@"Preview", @"Preview-only view mode"),
+            NSLocalizedString(@"Split", @"Editor and preview view mode")
+        ]
+        selectionMode:NSToolbarItemGroupSelectionModeSelectOne
+        labels:@[
+            NSLocalizedString(@"Editor", @"Editor-only view mode"),
+            NSLocalizedString(@"Preview", @"Preview-only view mode"),
+            NSLocalizedString(@"Split", @"Editor and preview view mode")
+        ]
+        target:self
+        action:@selector(selectedViewMode:)];
+    self->viewModeItemGroup.label = NSLocalizedString(@"View", @"View mode toolbar group");
+    self->viewModeItemGroup.paletteLabel = self->viewModeItemGroup.label;
+    self->viewModeItemGroup.visibilityPriority = NSToolbarItemVisibilityPriorityUser;
     
     // Set up all available toolbar items
     self->toolbarItems = @[
@@ -83,14 +99,24 @@ static CGFloat itemWidth = 37;
         [self toolbarItemWithIdentifier:@"comment" label:NSLocalizedString(@"Comment", @"Comment toolbar button") icon:@"ToolbarIconComment" action:@selector(toggleComment:)],
         [self toolbarItemWithIdentifier:@"highlight" label:NSLocalizedString(@"Highlight", @"Highlight toolbar button") icon:@"ToolbarIconHighlight" action:@selector(toggleHighlight:)],
         [self toolbarItemWithIdentifier:@"strikethrough" label:NSLocalizedString(@"Strikethrough", @"Strikethrough toolbar button") icon:@"ToolbarIconStrikethrough" action:@selector(toggleStrikethrough:)],
-        [self toolbarItemDropDownWithIdentifier:@"layout" label:NSLocalizedString(@"Layout", @"Layout toolbar button") icon:@"ToolbarIconEditorAndPreview" menuItems:
-            @[
-              toggleEditorMenuItem, togglePreviewMenuItem
-            ]
-        ]
+        self->viewModeItemGroup
     ];
     
     self->toolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
+}
+
+- (void)selectedViewMode:(NSToolbarItemGroup *)sender
+{
+    if (sender.selectedIndex < MPDocumentViewModeEditor
+        || sender.selectedIndex > MPDocumentViewModeSplit)
+        return;
+
+    self.document.documentViewMode = (MPDocumentViewMode)sender.selectedIndex;
+}
+
+- (void)syncViewMode
+{
+    self->viewModeItemGroup.selectedIndex = self.document.documentViewMode;
 }
 
 /**
@@ -125,49 +151,43 @@ static CGFloat itemWidth = 37;
 #pragma mark - NSToolbarDelegate
 - (NSArray<NSString *> *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
-    NSArray *orderedToolbarItemIdentifiers = [self toolbarItemIdentifiersFromItemsArray:self->toolbarItems];
-    
     NSMutableArray *defaultItemIdentifiers = [NSMutableArray new];
-    NSSet<NSNumber *> *spaceAfterIndices = [NSSet set]; // No space in the default set.
-    NSSet<NSNumber *> *flexibleSpaceAfterIndices =
-        [NSSet setWithObjects:@2, @3, @5, @7, @11, nil];
-    NSInteger index = 0;
-    
-    for (NSString *itemIdentifier in orderedToolbarItemIdentifiers)
+    NSMutableSet *centeredItemIdentifiers = [NSMutableSet new];
+
+    [defaultItemIdentifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
+
+    for (NSString *itemIdentifier in self->toolbarItemIdentifiers)
     {
-        // exclude some toolbar items from the default toolbar
         if ([itemIdentifier isEqualToString:@"comment"]
             || [itemIdentifier isEqualToString:@"highlight"]
-            || [itemIdentifier isEqualToString:@"strikethrough"]) {
-            // do nothing here
-        }else {
-            [defaultItemIdentifiers addObject:itemIdentifier];
-        }
-        
-        if ([spaceAfterIndices containsObject:@(index)])
-        {
-            [defaultItemIdentifiers addObject:NSToolbarSpaceItemIdentifier];
-        }
-        
-        if ([flexibleSpaceAfterIndices containsObject:@(index)])
-        {
-            [defaultItemIdentifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
-        }
-        
-        index++;
+            || [itemIdentifier isEqualToString:@"strikethrough"]
+            || [itemIdentifier isEqualToString:@"view-mode"])
+            continue;
+
+        [defaultItemIdentifiers addObject:itemIdentifier];
+        [centeredItemIdentifiers addObject:itemIdentifier];
     }
+
+    [defaultItemIdentifiers addObject:NSToolbarFlexibleSpaceItemIdentifier];
+    [defaultItemIdentifiers addObject:@"view-mode"];
+
+    if (@available(macOS 13.0, *))
+        toolbar.centeredItemIdentifiers = centeredItemIdentifiers;
     
     return [defaultItemIdentifiers copy];
 }
 
 - (NSArray<NSString *> *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
 {
-    return self->toolbarItemIdentifiers;
+    return [self->toolbarItemIdentifiers arrayByAddingObjectsFromArray:@[
+        NSToolbarSpaceItemIdentifier,
+        NSToolbarFlexibleSpaceItemIdentifier
+    ]];
 }
 
 - (NSArray<NSString *> *)toolbarSelectableItemIdentifiers:(NSToolbar *)toolbar
 {
-    return [self toolbarAllowedItemIdentifiers:toolbar];
+    return @[@"view-mode"];
 }
 
 - (NSToolbarItem *)toolbar:(NSToolbar *)toolbar itemForItemIdentifier:(NSString *)itemIdentifier willBeInsertedIntoToolbar:(BOOL)flag
@@ -254,41 +274,5 @@ static CGFloat itemWidth = 37;
     
     return toolbarItem;
 }
-
-/**
- * Factory method for creating and configuring a NSToolbarItem object with a NSPopupButton holding menu options as passed in the menuItems parameter.
- */
-- (NSToolbarItem *)toolbarItemDropDownWithIdentifier:(NSString *)itemIdentifier label:(NSString *)label icon:(NSString *)iconImageName menuItems:(NSArray <NSMenuItem *>*)menuItems {
-    NSToolbarItem *toolbarItem = [[NSToolbarItem alloc] initWithItemIdentifier:itemIdentifier];
-    toolbarItem.label = label;
-    toolbarItem.paletteLabel = label;
-    toolbarItem.toolTip = label;
-    
-    NSImage *itemImage = [NSImage imageNamed:iconImageName];
-    [itemImage setTemplate:YES];
-    [itemImage setSize:CGSizeMake(19, 19)];
-    
-    NSPopUpButton *popupButton = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 42, 27) pullsDown:YES];
-    popupButton.bezelStyle = NSBezelStyleTexturedRounded;
-    popupButton.focusRingType = NSFocusRingTypeDefault;
-    //popupButton.imageScaling = NSImageScaleProportionallyDown;
-    
-    // First item's image is displayed as button image, therefor we need a dummy with the icon
-    [popupButton addItemWithTitle:@""];
-    [[popupButton lastItem] setImage:itemImage];
-    
-    for (NSMenuItem *menuItem in menuItems) {
-        [popupButton addItemWithTitle:menuItem.title];
-        [[popupButton lastItem] setTarget:self.document];
-        [[popupButton lastItem] setAction:menuItem.action];
-    }
-    
-    toolbarItem.view = popupButton;
-    
-    [self->toolbarItemIdentifierObjectDictionary setObject:toolbarItem forKey:itemIdentifier];
-    
-    return toolbarItem;
-}
-
 
 @end

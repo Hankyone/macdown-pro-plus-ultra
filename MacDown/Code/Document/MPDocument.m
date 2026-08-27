@@ -31,6 +31,7 @@
 #import "WebView+WebViewPrivateHeaders.h"
 #import "MPToolbarController.h"
 #import <JavaScriptCore/JavaScriptCore.h>
+#import <fcntl.h>
 
 static NSString * const kMPDefaultAutosaveName = @"Untitled";
 
@@ -215,6 +216,16 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 @property (strong) NSArray<NSNumber *> *webViewHeaderLocations;
 @property (strong) NSArray<NSNumber *> *editorHeaderLocations;
 @property (nonatomic) BOOL inLiveScroll;
+@property (strong) dispatch_source_t externalChangeSource;
+@property int externalChangeFileDescriptor;
+@property NSUInteger externalChangeGeneration;
+@property NSUInteger externalChangePillGeneration;
+@property (copy) NSString *lastKnownDiskString;
+@property (copy) NSString *pendingExternalString;
+@property (strong) NSView *externalChangePill;
+@property (strong) NSTextField *externalChangeLabel;
+@property (strong) NSButton *externalReloadButton;
+@property (strong) NSButton *externalKeepButton;
 
 // Store file content in initializer until nib is loaded.
 @property (copy) NSString *loadedString;
@@ -222,6 +233,10 @@ typedef NS_ENUM(NSUInteger, MPWordCountType) {
 - (void)scaleWebview;
 - (void)syncScrollers;
 -(void) updateHeaderLocations;
+- (void)startWatchingDocumentFile;
+- (void)stopWatchingDocumentFile;
+- (void)checkForExternalChange;
+- (void)setupExternalChangePill;
 
 @end
 
@@ -291,6 +306,42 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     return (self.editorContainer.frame.size.width != 0.0);
 }
 
+- (MPDocumentViewMode)documentViewMode
+{
+    if (self.editorVisible && self.previewVisible)
+        return MPDocumentViewModeSplit;
+    if (self.editorVisible)
+        return MPDocumentViewModeEditor;
+    return MPDocumentViewModePreview;
+}
+
+- (void)setDocumentViewMode:(MPDocumentViewMode)documentViewMode
+{
+    CGFloat currentRatio = self.splitView.dividerLocation;
+    if (currentRatio > 0.0 && currentRatio < 1.0)
+        self.previousSplitRatio = currentRatio;
+
+    BOOL editorOnLeft = self.splitView.subviews.firstObject == self.editorContainer;
+    CGFloat targetRatio = 0.5;
+    switch (documentViewMode)
+    {
+        case MPDocumentViewModeEditor:
+            targetRatio = editorOnLeft ? 1.0 : 0.0;
+            break;
+        case MPDocumentViewModePreview:
+            targetRatio = editorOnLeft ? 0.0 : 1.0;
+            break;
+        case MPDocumentViewModeSplit:
+            targetRatio = self.previousSplitRatio;
+            if (targetRatio <= 0.0 || targetRatio >= 1.0)
+                targetRatio = 0.5;
+            break;
+    }
+
+    [self setSplitViewDividerLocation:targetRatio];
+    [self.toolbarController syncViewMode];
+}
+
 - (BOOL)needsHtml
 {
     if (self.preferences.markdownManualRender)
@@ -347,6 +398,7 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     self.isPreviewReady = NO;
     self.shouldHandleBoundsChange = YES;
     self.previousSplitRatio = -1.0;
+    self.externalChangeFileDescriptor = -1;
     
     return self;
 }
@@ -456,6 +508,9 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         [self setupEditor:nil];
         [self redrawDivider];
         [self reloadFromLoadedString];
+        [self.toolbarController syncViewMode];
+        [self setupExternalChangePill];
+        [self startWatchingDocumentFile];
     }];
 }
 
@@ -472,6 +527,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 - (void)close
 {
+    [self stopWatchingDocumentFile];
+
     if (self.needsToUnregister) 
     {
         // Close can be called multiple times, but this can only be done once.
@@ -539,12 +596,36 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
             self.editor.selectedRange = selection;
         }
     }
-    return [super writeToURL:url ofType:typeName error:outError];
+    BOOL wroteFile = [super writeToURL:url ofType:typeName error:outError];
+    if (wroteFile)
+    {
+        self.lastKnownDiskString = self.editor.string;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self startWatchingDocumentFile];
+        });
+    }
+    return wroteFile;
 }
 
 - (NSData *)dataOfType:(NSString *)typeName error:(NSError **)outError
 {
     return [self.editor.string dataUsingEncoding:NSUTF8StringEncoding];
+}
+
+- (void)autosaveWithImplicitCancellability:(BOOL)autosavingIsImplicitlyCancellable
+                         completionHandler:(void (^)(NSError *errorOrNil))completionHandler
+{
+    if (self.pendingExternalString)
+    {
+        NSError *error = [NSError errorWithDomain:NSCocoaErrorDomain
+                                             code:NSUserCancelledError
+                                         userInfo:nil];
+        completionHandler(error);
+        return;
+    }
+
+    [super autosaveWithImplicitCancellability:autosavingIsImplicitlyCancellable
+                            completionHandler:completionHandler];
 }
 
 - (BOOL)readFromData:(NSData *)data ofType:(NSString *)typeName
@@ -556,6 +637,8 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
         return NO;
 
     self.loadedString = content;
+    self.lastKnownDiskString = content;
+    self.pendingExternalString = nil;
     [self reloadFromLoadedString];
     return YES;
 }
@@ -669,25 +752,28 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
             NSLocalizedString(@"Show Toolbar",
                               @"Toggle reveal toolbar");
     }
-    else if (action == @selector(togglePreviewPane:))
+    else if (action == @selector(showEditorMode:)
+             || action == @selector(showPreviewMode:)
+             || action == @selector(showSplitMode:))
     {
         NSMenuItem *it = ((NSMenuItem *)item);
-        it.hidden = (!self.previewVisible && self.previousSplitRatio < 0.0);
-        it.title = self.previewVisible ?
-            NSLocalizedString(@"Hide Preview Pane",
-                              @"Toggle preview pane menu item") :
-            NSLocalizedString(@"Restore Preview Pane",
-                              @"Toggle preview pane menu item");
-
-    }
-    else if (action == @selector(toggleEditorPane:))
-    {
-        NSMenuItem *it = (NSMenuItem*)item;
-        it.title = self.editorVisible ?
-        NSLocalizedString(@"Hide Editor Pane",
-                          @"Toggle editor pane menu item") :
-        NSLocalizedString(@"Restore Editor Pane",
-                          @"Toggle editor pane menu item");
+        MPDocumentViewMode itemMode = MPDocumentViewModeSplit;
+        if (action == @selector(showEditorMode:))
+        {
+            itemMode = MPDocumentViewModeEditor;
+            it.title = NSLocalizedString(@"Editor", @"Editor-only view mode");
+        }
+        else if (action == @selector(showPreviewMode:))
+        {
+            itemMode = MPDocumentViewModePreview;
+            it.title = NSLocalizedString(@"Preview", @"Preview-only view mode");
+        }
+        else
+        {
+            it.title = NSLocalizedString(@"Split", @"Editor and preview view mode");
+        }
+        it.state = self.documentViewMode == itemMode
+            ? NSControlStateValueOn : NSControlStateValueOff;
     }
     return result;
 }
@@ -699,6 +785,10 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 {
     [self redrawDivider];
     self.editor.editable = self.editorVisible;
+    CGFloat ratio = self.splitView.dividerLocation;
+    if (ratio > 0.0 && ratio < 1.0)
+        self.previousSplitRatio = ratio;
+    [self.toolbarController syncViewMode];
 }
 
 
@@ -1473,19 +1563,24 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
     [self setSplitViewDividerLocation:0.5];
 }
 
+- (IBAction)showEditorMode:(id)sender
+{
+    self.documentViewMode = MPDocumentViewModeEditor;
+}
+
+- (IBAction)showPreviewMode:(id)sender
+{
+    self.documentViewMode = MPDocumentViewModePreview;
+}
+
+- (IBAction)showSplitMode:(id)sender
+{
+    self.documentViewMode = MPDocumentViewModeSplit;
+}
+
 - (IBAction)toggleToolbar:(id)sender
 {
     [self.windowForSheet toggleToolbarShown:sender];
-}
-
-- (IBAction)togglePreviewPane:(id)sender
-{
-    [self toggleSplitterCollapsingEditorPane:NO];
-}
-
-- (IBAction)toggleEditorPane:(id)sender
-{
-    [self toggleSplitterCollapsingEditorPane:YES];
 }
 
 - (IBAction)render:(id)sender
@@ -1496,34 +1591,235 @@ static void (^MPGetPreviewLoadingCompletionHandler(MPDocument *doc))()
 
 #pragma mark - Private
 
-- (void)toggleSplitterCollapsingEditorPane:(BOOL)forEditorPane
+- (void)startWatchingDocumentFile
 {
-    BOOL isVisible = forEditorPane ? self.editorVisible : self.previewVisible;
-    BOOL editorOnRight = self.preferences.editorOnRight;
+    [self stopWatchingDocumentFile];
 
-    float targetRatio = ((forEditorPane == editorOnRight) ? 1.0 : 0.0);
+    NSURL *fileURL = self.fileURL;
+    if (!fileURL.isFileURL || !fileURL.path.length)
+        return;
 
-    if (isVisible)
+    int descriptor = open(fileURL.path.fileSystemRepresentation, O_EVTONLY);
+    if (descriptor < 0)
+        return;
+
+    self.externalChangeFileDescriptor = descriptor;
+    self.externalChangeSource = dispatch_source_create(
+        DISPATCH_SOURCE_TYPE_VNODE,
+        descriptor,
+        DISPATCH_VNODE_WRITE | DISPATCH_VNODE_DELETE | DISPATCH_VNODE_RENAME
+            | DISPATCH_VNODE_EXTEND | DISPATCH_VNODE_ATTRIB,
+        dispatch_get_main_queue());
+
+    if (!self.externalChangeSource)
     {
-        CGFloat oldRatio = self.splitView.dividerLocation;
-        if (oldRatio != 0.0 && oldRatio != 1.0)
+        close(descriptor);
+        self.externalChangeFileDescriptor = -1;
+        return;
+    }
+
+    __weak MPDocument *weakSelf = self;
+    dispatch_source_set_event_handler(self.externalChangeSource, ^{
+        MPDocument *strongSelf = weakSelf;
+        if (!strongSelf)
+            return;
+
+        unsigned long flags = dispatch_source_get_data(strongSelf.externalChangeSource);
+        BOOL fileWasReplaced = (flags & (DISPATCH_VNODE_DELETE | DISPATCH_VNODE_RENAME)) != 0;
+        NSUInteger generation = ++strongSelf.externalChangeGeneration;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                     (int64_t)(0.08 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            if (strongSelf.externalChangeGeneration == generation)
+            {
+                [strongSelf checkForExternalChange];
+                if (fileWasReplaced)
+                    [strongSelf startWatchingDocumentFile];
+            }
+        });
+    });
+    dispatch_source_set_cancel_handler(self.externalChangeSource, ^{
+        close(descriptor);
+    });
+    dispatch_resume(self.externalChangeSource);
+}
+
+- (void)stopWatchingDocumentFile
+{
+    if (self.externalChangeSource)
+    {
+        dispatch_source_cancel(self.externalChangeSource);
+        self.externalChangeSource = nil;
+    }
+    self.externalChangeFileDescriptor = -1;
+    self.externalChangeGeneration++;
+}
+
+- (void)checkForExternalChange
+{
+    NSURL *fileURL = self.fileURL;
+    if (!fileURL.isFileURL)
+        return;
+
+    NSError *readError = nil;
+    NSString *diskString = [NSString stringWithContentsOfURL:fileURL
+                                                    encoding:NSUTF8StringEncoding
+                                                       error:&readError];
+    if (!diskString || [diskString isEqualToString:self.lastKnownDiskString])
+        return;
+
+    self.lastKnownDiskString = diskString;
+    if (self.isDocumentEdited)
+    {
+        self.pendingExternalString = diskString;
+        [self showExternalChangePillWithMessage:
+            NSLocalizedString(@"File changed elsewhere", @"External file conflict")
+                                      requiresDecision:YES];
+        return;
+    }
+
+    [self reloadDocumentFromDiskAutomatically:YES];
+}
+
+- (void)reloadDocumentFromDiskAutomatically:(BOOL)automatically
+{
+    NSURL *fileURL = self.fileURL;
+    NSString *fileType = self.fileType ?: @"net.daringfireball.markdown";
+    if (!fileURL)
+        return;
+
+    __weak MPDocument *weakSelf = self;
+    [self performActivityWithSynchronousWaiting:!automatically usingBlock:
+     ^(void (^activityCompletionHandler)(void)) {
+        MPDocument *strongSelf = weakSelf;
+        NSError *error = nil;
+        BOOL reloaded = [strongSelf revertToContentsOfURL:fileURL
+                                                   ofType:fileType
+                                                    error:&error];
+        if (reloaded)
         {
-            // We don't want to save these values, since they are meaningless.
-            // The user should be able to switch between 100% editor and 100%
-            // preview without losing the old ratio.
-            self.previousSplitRatio = oldRatio;
+            [strongSelf showExternalChangePillWithMessage:
+                NSLocalizedString(@"Updated from disk", @"External file update confirmation")
+                                          requiresDecision:NO];
         }
-        [self setSplitViewDividerLocation:targetRatio];
-    }
-    else
-    {
-        // We have an inconsistency here, let's just go back to 0.5,
-        // otherwise nothing will happen
-        if (self.previousSplitRatio < 0.0)
-            self.previousSplitRatio = 0.5;
+        else
+        {
+            [strongSelf showExternalChangePillWithMessage:
+                NSLocalizedString(@"Couldn’t reload file", @"External file reload failure")
+                                          requiresDecision:NO];
+        }
+        activityCompletionHandler();
+    }];
+}
 
-        [self setSplitViewDividerLocation:self.previousSplitRatio];
+- (void)setupExternalChangePill
+{
+    if (self.externalChangePill || !self.windowForSheet.contentView)
+        return;
+
+    self.externalChangeLabel = [NSTextField labelWithString:@""];
+    self.externalChangeLabel.font = [NSFont systemFontOfSize:12.0
+                                                      weight:NSFontWeightMedium];
+    self.externalChangeLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+
+    self.externalReloadButton = [NSButton buttonWithTitle:
+        NSLocalizedString(@"Reload", @"Reload external file change")
+                                                target:self
+                                                action:@selector(reloadExternalChange:)];
+    self.externalKeepButton = [NSButton buttonWithTitle:
+        NSLocalizedString(@"Keep Editing", @"Keep local document edits")
+                                              target:self
+                                              action:@selector(keepExternalChange:)];
+    for (NSButton *button in @[self.externalReloadButton, self.externalKeepButton])
+    {
+        button.bezelStyle = NSBezelStyleAccessoryBarAction;
+        button.controlSize = NSControlSizeSmall;
+        button.hidden = YES;
     }
+
+    NSStackView *content = [NSStackView stackViewWithViews:@[
+        self.externalChangeLabel,
+        self.externalReloadButton,
+        self.externalKeepButton
+    ]];
+    content.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+    content.alignment = NSLayoutAttributeCenterY;
+    content.spacing = 8.0;
+    content.edgeInsets = NSEdgeInsetsMake(5.0, 12.0, 5.0, 12.0);
+
+    NSGlassEffectView *glass = [NSGlassEffectView new];
+    glass.cornerRadius = 16.0;
+    glass.style = NSGlassEffectViewStyleRegular;
+    glass.contentView = content;
+    NSView *pill = glass;
+
+    pill.translatesAutoresizingMaskIntoConstraints = NO;
+    pill.hidden = YES;
+    self.externalChangePill = pill;
+    NSView *rootView = self.windowForSheet.contentView;
+    [rootView addSubview:pill positioned:NSWindowAbove relativeTo:nil];
+    [NSLayoutConstraint activateConstraints:@[
+        [pill.centerXAnchor constraintEqualToAnchor:rootView.centerXAnchor],
+        [pill.topAnchor constraintEqualToAnchor:rootView.topAnchor constant:12.0],
+        [pill.leadingAnchor constraintGreaterThanOrEqualToAnchor:rootView.leadingAnchor constant:16.0],
+        [pill.trailingAnchor constraintLessThanOrEqualToAnchor:rootView.trailingAnchor constant:-16.0]
+    ]];
+}
+
+- (void)showExternalChangePillWithMessage:(NSString *)message
+                         requiresDecision:(BOOL)requiresDecision
+{
+    [self setupExternalChangePill];
+    self.externalChangePillGeneration++;
+    self.externalChangeLabel.stringValue = message;
+    self.externalReloadButton.hidden = !requiresDecision;
+    self.externalKeepButton.hidden = !requiresDecision;
+    self.externalChangePill.hidden = NO;
+    self.externalChangePill.alphaValue = 1.0;
+
+    if (@available(macOS 27.0, *))
+    {
+        if ([self.externalChangePill isKindOfClass:NSGlassEffectView.class])
+            ((NSGlassEffectView *)self.externalChangePill).effectIsInteractive = requiresDecision;
+    }
+
+    if (!requiresDecision)
+    {
+        NSUInteger generation = self.externalChangePillGeneration;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                     (int64_t)(2.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            if (self.externalChangePillGeneration != generation)
+                return;
+            [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+                context.duration = 0.18;
+                self.externalChangePill.animator.alphaValue = 0.0;
+            } completionHandler:^{
+                if (self.externalChangePillGeneration == generation)
+                    self.externalChangePill.hidden = YES;
+            }];
+        });
+    }
+}
+
+- (IBAction)reloadExternalChange:(id)sender
+{
+    self.pendingExternalString = nil;
+    self.externalChangePill.hidden = YES;
+    [self reloadDocumentFromDiskAutomatically:NO];
+}
+
+- (IBAction)keepExternalChange:(id)sender
+{
+    self.pendingExternalString = nil;
+    NSDictionary *attributes = [[NSFileManager defaultManager]
+        attributesOfItemAtPath:self.fileURL.path error:nil];
+    NSDate *modificationDate = attributes[NSFileModificationDate];
+    if (modificationDate)
+        self.fileModificationDate = modificationDate;
+    self.externalChangePillGeneration++;
+    self.externalChangePill.hidden = YES;
+    [self scheduleAutosaving];
 }
 
 - (void)setupEditor:(NSString *)changedKey

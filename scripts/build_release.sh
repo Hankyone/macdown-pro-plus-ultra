@@ -11,6 +11,7 @@ DERIVED_DATA="$ROOT/build/DerivedData"
 PRODUCTS="$DERIVED_DATA/Build/Products/Release"
 DIST="$ROOT/dist"
 TMPDIR="$(mktemp -d)"
+XCODE_DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
 
 cleanup() {
   trash "$TMPDIR" 2>/dev/null || true
@@ -36,12 +37,12 @@ make -C Dependency/peg-markdown-highlight
 trash "$ROOT/Dependency/version/version.h" 2>/dev/null || true
 pod install
 
-xcodebuild \
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcodebuild \
   -workspace MacDown.xcworkspace \
   -scheme MacDown \
   -configuration Release \
   -derivedDataPath "$DERIVED_DATA" \
-  MACOSX_DEPLOYMENT_TARGET=10.13 \
+  MACOSX_DEPLOYMENT_TARGET=26.0 \
   ARCHS=arm64 \
   CODE_SIGNING_ALLOWED=NO
 
@@ -59,7 +60,7 @@ COPYFILE_DISABLE=1 /usr/bin/tar -cf - -C "$PRODUCTS" "$APP_NAME" \
 
 mkdir -p "$FINDER_EXTENSION/Contents/MacOS"
 cp "$ROOT/MacDownFinderExtension/Info.plist" "$FINDER_EXTENSION/Contents/Info.plist"
-swiftc \
+DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun swiftc \
   -emit-executable \
   -parse-as-library \
   -module-name MacDownFinderExtension \

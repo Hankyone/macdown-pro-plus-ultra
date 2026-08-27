@@ -26,5 +26,5 @@ jobs:
             -scheme MacDown \
             -configuration Release \
             -derivedDataPath build/DerivedData \
-            MACOSX_DEPLOYMENT_TARGET=10.13 \
+            MACOSX_DEPLOYMENT_TARGET=26.0 \
             CODE_SIGNING_ALLOWED=NO

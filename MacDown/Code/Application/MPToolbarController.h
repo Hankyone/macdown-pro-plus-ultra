@@ -13,4 +13,6 @@
 
 @property (weak) IBOutlet MPDocument *document;
 
+- (void)syncViewMode;
+
 @end

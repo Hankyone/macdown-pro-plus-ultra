@@ -50,6 +50,8 @@ DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcodebuild \
 APP_SRC="$PRODUCTS/$APP_NAME"
 APP_TMP="$TMPDIR/$APP_NAME"
 FINDER_EXTENSION="$APP_TMP/Contents/PlugIns/MacDownFinderExtension.appex"
+SPARKLE_FRAMEWORK="$APP_TMP/Contents/Frameworks/Sparkle.framework"
+SPARKLE_AUTOUPDATE="$SPARKLE_FRAMEWORK/Versions/A/Resources/Autoupdate.app"
 
 if [[ ! -d "$APP_SRC" ]]; then
   echo "Build did not produce $APP_SRC" >&2
@@ -78,16 +80,35 @@ codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" 
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   "$APP_TMP/Contents/SharedSupport/bin/macdown-pppu"
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
-  "$APP_TMP/Contents/Frameworks/Sparkle.framework"
+  "$SPARKLE_AUTOUPDATE/Contents/MacOS/fileop"
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
+  "$SPARKLE_AUTOUPDATE"
+codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
+  "$SPARKLE_FRAMEWORK"
 codesign --force --sign "Developer ID Application: Anouar Mansour (K32684A887)" --timestamp --options=runtime \
   "$APP_TMP"
 codesign --verify --strict --verbose=2 "$APP_TMP"
 
 NOTARIZATION_ZIP="$TMPDIR/notarization.zip"
+NOTARIZATION_RESULT="$TMPDIR/notarization-result.json"
 COPYFILE_DISABLE=1 ditto -c -k --keepParent --norsrc --noextattr "$APP_TMP" "$NOTARIZATION_ZIP"
 DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun notarytool submit "$NOTARIZATION_ZIP" \
   --keychain-profile "$NOTARYTOOL_PROFILE" \
-  --wait
+  --wait \
+  --output-format json > "$NOTARIZATION_RESULT"
+python3 - "$NOTARIZATION_RESULT" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    result = json.load(f)
+
+if result.get("status") != "Accepted":
+    raise SystemExit(
+        f"Notarization {result.get('id', 'submission')} finished with status "
+        f"{result.get('status', 'unknown')}"
+    )
+PY
 DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun stapler staple "$APP_TMP"
 DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcrun stapler validate "$APP_TMP"
 spctl --assess --type execute --verbose=2 "$APP_TMP"

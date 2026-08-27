@@ -31,6 +31,7 @@ static CGFloat itemWidth = 37;
 {
     NSGlassEffectView *_glassView;
     NSGlassEffectView *_selectionView;
+    NSTextField *_selectionLabel;
     NSView *_contentView;
     NSArray<NSButton *> *_buttons;
     BOOL _hasLaidOutSelection;
@@ -53,6 +54,13 @@ static CGFloat itemWidth = 37;
     _selectionView.cornerRadius = 13;
     _selectionView.tintColor = [NSColor unemphasizedSelectedContentBackgroundColor];
     _selectionView.alphaValue = 0;
+    _selectionLabel = [NSTextField labelWithString:@""];
+    _selectionLabel.alignment = NSTextAlignmentCenter;
+    _selectionLabel.font = [NSFont systemFontOfSize:[NSFont systemFontSize] weight:NSFontWeightMedium];
+    _selectionLabel.textColor = NSColor.labelColor;
+    _selectionLabel.frame = _selectionView.bounds;
+    _selectionLabel.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    _selectionView.contentView = _selectionLabel;
     [_contentView addSubview:_selectionView];
 
     NSMutableArray<NSButton *> *buttons = [NSMutableArray arrayWithCapacity:labels.count];
@@ -132,6 +140,7 @@ static CGFloat itemWidth = 37;
 
     BOOL selectionChanged = _selectedSegment != selectedSegment;
     _selectedSegment = selectedSegment;
+    _selectionLabel.stringValue = _buttons[selectedSegment].title;
     [_buttons enumerateObjectsUsingBlock:^(NSButton *button, NSUInteger index, BOOL *stop) {
         button.accessibilityValue = @(index == selectedSegment);
     }];
